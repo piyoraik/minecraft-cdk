@@ -7,9 +7,10 @@ import {
 } from "aws-cdk-lib";
 import { Construct } from "constructs";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
-import { MachineImage } from "aws-cdk-lib/aws-ec2";
+import * as iam from "aws-cdk-lib/aws-iam";
+import { CfnEIP, MachineImage } from "aws-cdk-lib/aws-ec2";
 
-export class MinecraftCdkStack extends Stack {
+export class MinecraftEC2Stack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
 
@@ -31,6 +32,18 @@ export class MinecraftCdkStack extends Stack {
     });
     cfnKeyPair.applyRemovalPolicy(RemovalPolicy.DESTROY);
 
+    // IAMロール作成
+    const s3Role = new iam.Role(this, "ec2-s3-role", {
+      assumedBy: new iam.ServicePrincipal("ec2.amazonaws.com"),
+      description: "S3-FullAccess",
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonS3FullAccess"),
+        iam.ManagedPolicy.fromAwsManagedPolicyName(
+          "AmazonSSMManagedInstanceCore"
+        ),
+      ],
+    });
+
     // キーペア取得コマンドアウトプット
     new CfnOutput(this, "GetSSHKeyCommand", {
       value: `aws ssm get-parameter --name /ec2/keypair/${cfnKeyPair.getAtt(
@@ -41,18 +54,29 @@ export class MinecraftCdkStack extends Stack {
     });
 
     // EC2作成
-    const instance = new ec2.Instance(this, "MinecraftServer", {
+    const minecraftInstance = new ec2.Instance(this, "MinecraftServer", {
       vpc,
       instanceType: ec2.InstanceType.of(
         ec2.InstanceClass.T4G,
-        ec2.InstanceSize.SMALL
+        ec2.InstanceSize.LARGE
       ),
       machineImage: MachineImage.genericLinux({
         "ap-northeast-1": "ami-0f808c98d829a4f79",
       }),
       keyName: Token.asString(cfnKeyPair.ref),
+      role: s3Role,
     });
-    instance.connections.allowFromAnyIpv4(ec2.Port.tcp(22));
-    instance.connections.allowFromAnyIpv4(ec2.Port.tcp(25565));
+    minecraftInstance.connections.allowFromAnyIpv4(ec2.Port.tcp(22));
+    minecraftInstance.connections.allowFromAnyIpv4(ec2.Port.tcp(25565));
+
+    // EIP作成 / 紐付け
+    const eip = new CfnEIP(this, "minecraft_ec2_eip", {
+      domain: "vpc",
+    });
+
+    new ec2.CfnEIPAssociation(this, "minecraft_ec2_eip_association", {
+      eip: eip.ref,
+      instanceId: minecraftInstance.instanceId,
+    });
   }
 }
