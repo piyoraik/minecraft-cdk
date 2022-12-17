@@ -14,7 +14,7 @@ export class MinecraftModManegeLambdaStack extends Stack {
     super(scope, id, props);
 
     // S3バケット定義
-    const s3Bucket = 'fcoding'
+    const s3Bucket = "fcoding";
 
     // Lambda関数作成
     const modDownloadURLPostFunction = new lambda.NodejsFunction(
@@ -27,9 +27,8 @@ export class MinecraftModManegeLambdaStack extends Stack {
         timeout: Duration.seconds(60),
         environment: {
           AZ: "Asia/Tokyo",
-          DISCORD_URL:
-            "https://discord.com/api/webhooks/1031768121985478826/NFKHeyXjkpeG4HFNYf7gIDaMo8gG4YRpyaqvnmKtUCqmfgw4q1rBfD5DMtKhGvBhjcS8",
-          S3_BUCKET: s3Bucket
+          DISCORD_URL: process.env.DISCORD_URL!,
+          S3_BUCKET: s3Bucket,
         },
       }
     );
